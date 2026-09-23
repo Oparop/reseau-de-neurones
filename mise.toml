@@ -1,0 +1,7 @@
+[tools]
+uv = "0.12.17"
+bun = "1.4.2"
+
+[tasks.tp1]
+description = "Démarre le serveur de dev du TP1 (perceptron)"
+run = "bun run dev"

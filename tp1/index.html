@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TP1 — Réseau de neurones</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <h1>Réseau de neurones à 2 entrées</h1>
+      <p class="hint">
+        Clic sur une zone vide : ajoute un point de la classe active.
+        Clic sur un point : le supprime. Puis lance l'entraînement pour voir
+        la courbe (frontière de décision) se déformer jusqu'à séparer les deux
+        classes — même quand aucune droite n'y arriverait. À droite, le réseau
+        lui-même, couche par couche : survole le plan pour suivre un point à
+        travers les neurones.
+      </p>
+
+      <div class="layout">
+        <canvas id="board" width="640" height="480"></canvas>
+
+        <figure class="network">
+          <canvas id="network" width="420" height="480"></canvas>
+          <p class="legend">
+            Traits = poids :
+            <span class="swatch pos"></span> positif
+            <span class="swatch neg"></span> négatif,
+            plus épais = plus fort. Dans chaque boule : la réponse du neurone
+            sur tout le plan.
+          </p>
+          <figcaption id="neuron-info"></figcaption>
+        </figure>
+
+        <aside class="panel">
+          <section>
+            <h2>Points</h2>
+            <button id="toggle-class" type="button">
+              Classe active : <strong id="active-class">Noir</strong>
+            </button>
+            <label class="slider">
+              Jeu de démo
+              <select id="demo-kind">
+                <option value="circle">Cercle (noir au centre)</option>
+                <option value="xor">XOR (damier 2×2)</option>
+                <option value="moons">Deux lunes</option>
+                <option value="blobs">Deux amas (une droite suffit)</option>
+              </select>
+            </label>
+            <div class="row">
+              <button id="demo" type="button">Démo</button>
+              <button id="reset" type="button">Reset</button>
+            </div>
+          </section>
+
+          <section>
+            <h2>Réseau</h2>
+            <label class="slider">
+              Couches cachées
+              <input id="layers" type="range" min="1" max="4" step="1" value="2" />
+              <span id="layers-val">2</span>
+            </label>
+            <label class="slider">
+              Neurones par couche
+              <input id="hidden" type="range" min="1" max="32" step="1" value="8" />
+              <span id="hidden-val">8</span>
+            </label>
+            <label class="check">
+              <input id="show-lines" type="checkbox" />
+              Afficher la droite de chaque neurone de la 1re couche
+            </label>
+            <div class="row">
+              <button id="new-weights" type="button">Nouveaux poids aléatoires</button>
+            </div>
+          </section>
+
+          <section>
+            <h2>Entraînement</h2>
+            <div class="row">
+              <button id="train" type="button">Entraîner</button>
+              <button id="step" type="button">Pas à pas</button>
+            </div>
+
+            <label class="slider">
+              Vitesse
+              <input id="speed" type="range" min="1" max="50" step="1" value="2" />
+              <span id="speed-val">2</span> itér./frame
+            </label>
+
+            <label class="slider">
+              Learning rate
+              <input id="lr" type="range" min="0.01" max="2" step="0.01" value="0.5" />
+              <span id="lr-val">0.50</span>
+            </label>
+          </section>
+
+          <section>
+            <h2>État du modèle</h2>
+            <table class="readouts">
+              <tbody>
+                <tr><td>Architecture</td><td id="arch">2 → 8 → 8 → 1</td></tr>
+                <tr><td>Paramètres</td><td id="params">105</td></tr>
+                <tr><td>Perte</td><td id="loss">—</td></tr>
+                <tr><td>Itérations</td><td id="iter">0</td></tr>
+                <tr><td>Erreurs</td><td id="err">0</td></tr>
+              </tbody>
+            </table>
+          </section>
+        </aside>
+      </div>
+    </div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
