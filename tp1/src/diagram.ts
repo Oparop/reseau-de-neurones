@@ -24,12 +24,13 @@
 // neurones) : on les lit en survolant un neurone.
 // ---------------------------------------------------------------------------
 
+import { FEATURES, isLinear } from "./features";
 import type { Vec2 } from "./geometry";
 import type { MLP } from "./mlp";
 
 /**
  * Désigne un neurone du schéma. `layer` suit la numérotation de `net.sizes` :
- * 0 = entrées (x puis y), 1 = 1re couche cachée, ..., dernière = sortie.
+ * 0 = entrées (x, y, ...), 1 = 1re couche cachée, ..., dernière = sortie.
  */
 export interface NodeRef {
   layer: number;
@@ -92,7 +93,13 @@ function layout(width: number, height: number, sizes: number[]): Layout {
 
   return sizes.map((n, l) => {
     const x = left + l * gap;
-    if (l === 0) return [-1, 1].map((side) => ({ x, y: midY + side * 70, r: 22 }));
+    if (l === 0) {
+      // Entrées (1 à 5), réparties en hauteur autour du milieu.
+      const spacing = Math.min(140, (bottom - top) / n);
+      const r = Math.min(22, spacing * 0.3);
+      const firstY = midY - (spacing * (n - 1)) / 2;
+      return Array.from({ length: n }, (_, i) => ({ x, y: firstY + i * spacing, r }));
+    }
     if (l === last) return [{ x, y: midY, r: 28 }];
 
     // Couches cachées : plus il y a de neurones (ou de couches), plus ils sont
@@ -177,16 +184,16 @@ export function drawDiagram(
   let k = 0; // numéro du neurone dans l'atlas, toutes couches confondues
   for (let l = 0; l <= last; l++) {
     for (let j = 0; j < sizes[l]; j++, k++) {
-      const value = probeActs ? displayValue(probeActs[l][j], l === last) : null;
+      const value = probeActs ? displayValue(net, l, probeActs[l][j]) : null;
       drawBall(ctx, columns[l][j], atlas, k, probe, value, isHovered(l, j));
     }
   }
 
   // --- Les étiquettes, par-dessus tout le reste --------------------------------
-  const inputNames = ["x", "y"];
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < sizes[0]; i++) {
     const ball = columns[0][i];
-    const text = probeActs ? `${inputNames[i]} = ${signed(probeActs[0][i])}` : inputNames[i];
+    const name = FEATURES[net.features[i]].label;
+    const text = probeActs ? `${name} = ${signed(probeActs[0][i])}` : name;
     drawLabel(ctx, text, ball.x, ball.y + ball.r + 12, "center", 12);
   }
 
@@ -230,9 +237,8 @@ export function describeNode(net: MLP, node: NodeRef | null): string {
 
   // Entrées.
   if (layer === 0) {
-    return j === 0
-      ? "Entrée x : position horizontale du point, de −1 (bord gauche) à +1 (bord droit)."
-      : "Entrée y : position verticale du point, de −1 (bord haut) à +1 (bord bas).";
+    const feature = FEATURES[net.features[j]];
+    return `Entrée ${feature.label} : ${feature.description}.`;
   }
 
   // Poids et biais qui arrivent sur ce neurone.
@@ -251,26 +257,34 @@ export function describeNode(net: MLP, node: NodeRef | null): string {
 
   const k = j + 1;
   const where = last === 2 ? "Neurone caché" : `Couche cachée ${layer}, neurone`;
+  const f = net.activation.label;
 
-  // 1re couche cachée : une droite adoucie, formule complète avec x et y.
+  // 1re couche cachée : formule complète, un terme par entrée.
   if (layer === 1) {
-    const [wx, wy] = w[j];
-    const first = wx < 0 ? "−" : "";
-    const formula =
-      `${where} h${k} = tanh(${first}${abs(wx)}·x${op(wy)}${abs(wy)}·y${op(b[j])}${abs(b[j])})`;
+    const terms = net.features
+      .map((name, i) => {
+        const wi = w[j][i];
+        const sign = i === 0 ? (wi < 0 ? "−" : "") : op(wi);
+        return `${sign}${abs(wi)}·${FEATURES[name].label}`;
+      })
+      .join("");
+    const formula = `${where} h${k} = ${f}(${terms}${op(b[j])}${abs(b[j])})`;
     // Une seule couche cachée : le poids vers la sortie tient en une valeur.
     const toOutput = last === 2 ? `, poids vers la sortie v${k} = ${signed(net.layers[1].w[0][j])}` : "";
-    return `${formula}${toOutput}. Sa droite est surlignée sur le plan.`;
+    const boundary = isLinear(net.features)
+      ? "Sa droite est surlignée sur le plan."
+      : "Sa frontière est surlignée sur le plan : une courbe, à cause des entrées x², y² ou x·y.";
+    return `${formula}${toOutput}. ${boundary}`;
   }
 
   // Couches suivantes : trop d'entrées pour écrire la formule en entier.
   const nIn = sizes[layer - 1];
   const weights = Array.from(w[j]);
   return (
-    `${where} h${k} = tanh(somme pondérée des ${nIn} neurones de la couche ${layer - 1} + b), ` +
+    `${where} h${k} = ${f}(somme pondérée des ${nIn} neurones de la couche ${layer - 1} + b), ` +
     `avec b = ${signed(b[j])} et des poids de ${signed(Math.min(...weights))} à ${signed(Math.max(...weights))}. ` +
-    `Sa frontière (h = 0) est tracée sur le plan : c'est déjà une courbe, car ce neurone combine ` +
-    `les ${layer === 2 ? "droites" : "courbes"} de la couche précédente.`
+    `Sa frontière (là où la somme s'annule) est tracée sur le plan : c'est déjà une courbe, car ce ` +
+    `neurone combine les frontières de la couche précédente.`
   );
 }
 
@@ -456,7 +470,7 @@ function paintAtlas(net: MLP): HTMLCanvasElement | null {
         const acts = net.activations[l];
         for (let j = 0; j < acts.length; j++, k++) {
           const i = (r * img.width + k * THUMB_RES + c) * 4;
-          writeColor(img.data, i, displayValue(acts[j], l === last));
+          writeColor(img.data, i, displayValue(net, l, acts[j]));
         }
       }
     }
@@ -466,11 +480,14 @@ function paintAtlas(net: MLP): HTMLCanvasElement | null {
 }
 
 /**
- * Valeur d'un neurone ramenée dans [-1, 1] pour la couleur. La sortie p est
- * entre 0 et 1 : on la recentre, pour que p = 0.5 (la frontière) soit blanc.
+ * Valeur d'un neurone ramenée dans [-1, 1] pour la couleur : les entrées
+ * telles quelles, les neurones cachés selon leur activation, et la sortie p
+ * (entre 0 et 1) recentrée pour que p = 0.5 (la frontière) soit blanc.
  */
-function displayValue(a: number, isOutput: boolean): number {
-  return isOutput ? (a - 0.5) * 2 : a;
+function displayValue(net: MLP, layer: number, a: number): number {
+  if (layer === 0) return a;
+  if (layer === net.sizes.length - 1) return (a - 0.5) * 2;
+  return net.activation.display(a);
 }
 
 // --- Petits utilitaires -----------------------------------------------------------

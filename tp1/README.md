@@ -92,14 +92,35 @@ séparer.
 | Deux lunes | non |
 | Deux amas | oui — pour comparer avec le perceptron simple |
 
+- **Part de points de test** (0 à 50 %, 20 % par défaut) : une partie des
+  points est mise de côté. Le réseau ne les voit **jamais** pendant
+  l'apprentissage ; on mesure dessus s'il sait **généraliser**, c'est-à-dire
+  bien classer des points qu'il n'a jamais vus. Sur le plan, les points
+  d'entraînement sont des **ronds**, les points de test des **carrés**.
+
 ### Régler le réseau
 
+- **Entrées** : ce que le réseau reçoit de chaque point. Par défaut `x` et `y`
+  (ses coordonnées) ; on peut ajouter des entrées **calculées** : `x²`, `y²`,
+  `x·y`. De bonnes entrées peuvent remplacer des couches entières : avec `x²`
+  et `y²`, un seul neurone sépare le cercle ; avec `x·y`, un seul neurone
+  résout le XOR.
 - **Couches cachées** : nombre de couches cachées (1 à 4, 2 par défaut).
 - **Neurones par couche** : taille de chaque couche cachée (1 à 32).
-  Changer l'un de ces deux réglages reconstruit un réseau neuf.
-- **Afficher la droite de chaque neurone de la 1re couche** : trace en
-  pointillés les droites « élémentaires » que le réseau combine pour former
-  sa courbe.
+- **Activation des neurones cachés** :
+
+| Activation | Réponse | À retenir |
+|------------|---------|-----------|
+| tanh | de −1 à +1, en douceur | bon choix par défaut, frontières arrondies |
+| ReLU | 0 d'un côté, proportionnelle de l'autre | l'activation des grands réseaux actuels ; frontières en morceaux de droites ; un neurone peut « mourir » (rester éteint partout) |
+| sigmoïde | de 0 à 1, en douceur | historique ; apprend nettement plus lentement |
+
+  Changer les entrées, les couches, les neurones ou l'activation reconstruit
+  un réseau neuf.
+- **Afficher la frontière de chaque neurone de la 1re couche** : trace les
+  frontières « élémentaires » que le réseau combine pour former sa courbe —
+  des droites en pointillés avec `x` et `y` seuls, des courbes avec `x²`, `y²`
+  ou `x·y`.
 - **Nouveaux poids aléatoires** : garde les points mais repart d'un nouveau
   tirage de poids (utile si le réseau reste coincé).
 
@@ -131,6 +152,19 @@ séparer.
   blanc). Plus la couleur est franche, plus le réseau est sûr de lui ; elle
   s'efface près de la frontière, là où il hésite.
 
+### Lire la courbe de perte
+
+Sous le plan, la **perte** est tracée au fil des itérations, pour les points
+d'entraînement (vert d'eau) et pour les points de test (jaune). Survoler la
+courbe affiche les valeurs d'une itération.
+
+- Les deux courbes descendent ensemble : le réseau apprend **et** généralise.
+- La courbe d'entraînement descend pendant que celle de test **remonte** : le
+  réseau apprend ses points par cœur, c'est le **surapprentissage**.
+- Une courbe en dents de scie : le *learning rate* est trop grand.
+- Un long plateau : le réseau est coincé (nouveaux poids, plus de neurones,
+  autre activation…).
+
 ### Lire le schéma du réseau
 
 À droite du plan, le réseau est dessiné couche par couche : une boule par
@@ -150,11 +184,13 @@ sur tout le plan.
 |-------|---------------|
 | Architecture | `2 → 8 → 8 → 1` : 2 entrées, la taille de chaque couche cachée, 1 sortie |
 | Paramètres | nombre de poids et de biais ajustés par l'apprentissage |
-| Perte | erreur moyenne « continue » (entropie croisée) : elle baisse tant que le réseau gagne en confiance, même quand il ne fait plus d'erreur |
 | Itérations | nombre de mises à jour effectuées |
-| Erreurs | nombre de points actuellement mal classés |
+| Perte | erreur moyenne « continue » (entropie croisée), sur les points d'entraînement et sur les points de test : elle baisse tant que le réseau gagne en confiance, même quand il ne fait plus d'erreur |
+| Erreurs | points mal classés sur le nombre de points, pour chaque lot (ex. `1 / 10`) |
 
-L'apprentissage a réussi quand **Erreurs = 0**.
+L'apprentissage a réussi quand les erreurs d'**entraînement** tombent à 0. Le
+réseau **généralise** bien si les erreurs de **test** restent faibles, elles
+aussi.
 
 ## Petites expériences à proposer
 
@@ -176,6 +212,18 @@ L'apprentissage a réussi quand **Erreurs = 0**.
    lui. C'est le **surapprentissage** : il colle aux exemples plutôt que de
    généraliser.
 7. Augmente le *learning rate* au maximum : la courbe devient instable.
+8. **Surapprentissage mesuré** : sur **Deux lunes**, mets la part de test à
+   **30 %**, prends **3 couches** en **ReLU** et entraîne longtemps. Les
+   erreurs d'entraînement tombent à 0, mais sur la courbe de perte, celle du
+   test finit souvent par **remonter**.
+9. **Entrées calculées** : sur le **Cercle**, ne garde que les entrées `x²` et
+   `y²`, avec **1 couche de 1 neurone** : il suffit ! Coche l'affichage des
+   frontières : la « droite » de ce neurone est une ellipse. Sur le **XOR**,
+   essaie l'entrée `x·y` seule.
+10. **Activations** : sur le **Cercle**, compare tanh, ReLU et sigmoïde avec
+    le même réseau. Regarde la forme de la frontière (arrondie ou en
+    polygone) et la vitesse de descente de la perte. En ReLU, repère dans le
+    schéma les neurones restés blancs partout : ils sont « morts ».
 
 ## Comment ça marche (sous le capot)
 
@@ -187,17 +235,20 @@ couche, de la sortie vers les entrées :
 
 ```text
 pour chaque point (classe attendue t) :
-  propagation avant :   chaque neurone j d'une couche cachée calcule
-                        a_j = tanh(Σ_i w_ji·a_i + b_j)   (a_i : couche précédente)
-                        puis la sortie p = sigmoïde(Σ_i v_i·h_i + bo)
+  propagation avant :   les entrées (x, y, et éventuellement x², y², x·y),
+                        puis chaque neurone j d'une couche cachée calcule
+                        a_j = f(Σ_i w_ji·a_i + b_j)      (f : tanh, ReLU ou sigmoïde)
+                        et enfin la sortie p = sigmoïde(Σ_i v_i·h_i + bo)
   erreur de sortie :    e = t − p                        (entre -1 et 1)
   pour chaque couche, de la sortie vers la 1re couche cachée :
     règle du perceptron :  g_w_ji += e_j × a_i
                            g_b_j  += e_j
-    rétropropagation :     e_i = (Σ_j e_j × w_ji) × (1 − a_i²)
+    rétropropagation :     e_i = (Σ_j e_j × w_ji) × pente de f en a_i
                            (part de l'erreur qui revient au neurone i
-                            de la couche précédente)
-puis, une seule fois (N = nombre de points) :
+                            de la couche précédente ; la pente vaut
+                            1 − a_i² pour tanh, 1 ou 0 pour ReLU,
+                            a_i × (1 − a_i) pour la sigmoïde)
+puis, une seule fois (N = nombre de points d'entraînement) :
                         chaque poids += learning_rate × g / N
 ```
 
@@ -215,6 +266,8 @@ tp1/
 └─ src/
    ├─ main.ts          # point d'entrée : clics, boucle d'animation
    ├─ mlp.ts           # le réseau : propagation avant et rétropropagation
+   ├─ features.ts      # les entrées possibles : x, y, x², y², x·y
+   ├─ chart.ts         # la courbe de perte (entraînement et test)
    ├─ geometry.ts      # conversions pixels ↔ [-1, 1], droites, tracé de courbe
    ├─ state.ts         # état partagé + jeux de démonstration
    ├─ renderer.ts      # dessin du plan (régions, courbe, points)

@@ -10,6 +10,9 @@ la frontière de décision se déformer jusqu'à séparer les deux classes.
   de 32 neurones ;
 - schéma du réseau en direct : poids, réponse de chaque neurone, propagation
   d'un point à travers les couches ;
+- points de test mis de côté et courbe de perte en direct, pour voir si le
+  réseau généralise ou apprend par cœur ;
+- activation au choix (tanh, ReLU, sigmoïde) et entrées calculées (x², y², x·y) ;
 - jeux de démonstration : cercle, XOR, deux lunes, deux amas.
 
 Tout le détail (utilisation, expériences à faire, fonctionnement de la

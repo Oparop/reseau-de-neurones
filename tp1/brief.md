@@ -71,3 +71,18 @@ comment il apprend une frontière de décision linéaire entre deux classes de p
   d'une couche profonde trace sa frontière (déjà courbe) sur le plan.
 - La grille de mesure du plan s'élargit automatiquement pour les gros réseaux,
   afin de garder une animation fluide.
+
+---
+
+## Évolution — généralisation, courbe de perte, activations, entrées
+
+> Coder les améliorations 1, 2, 3 et 5 : points d'entraînement et de test,
+> courbe de perte en direct, choix de l'activation, entrées x², y², x·y.
+
+- **Points de test** : une part réglable des points (20 % par défaut) est mise
+  de côté et jamais utilisée pour apprendre. Perte et erreurs sont affichées
+  pour l'entraînement et pour le test ; les points de test sont des carrés.
+- **Courbe de perte** : sous le plan, perte d'entraînement et de test au fil
+  des itérations, avec réticule et infobulle au survol.
+- **Activation** des neurones cachés au choix : tanh, ReLU, sigmoïde.
+- **Entrées** au choix : x, y, x², y², x·y (au moins une).

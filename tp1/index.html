@@ -8,7 +8,7 @@
   </head>
   <body>
     <div id="app">
-      <h1>Réseau de neurones à 2 entrées</h1>
+      <h1>Réseau de neurones interactif</h1>
       <p class="hint">
         Clic (ou toucher) sur une zone vide : ajoute un point de la classe
         active. Sur un point : le supprime. Puis lance l'entraînement pour voir
@@ -19,7 +19,32 @@
       </p>
 
       <div class="layout">
-        <canvas id="board" width="640" height="480"></canvas>
+        <div class="board-col">
+          <canvas id="board" width="640" height="480"></canvas>
+          <p class="legend">
+            <span class="shape round"></span> points d'entraînement
+            <span class="shape square"></span> points de test, que le réseau
+            ne voit jamais pendant l'apprentissage
+          </p>
+
+          <figure class="chart">
+            <figcaption>
+              <span class="chart-title">Perte au fil des itérations</span>
+              <span class="chart-legend">
+                <span class="key train"></span> entraînement
+                <span class="key test"></span> test
+              </span>
+            </figcaption>
+            <div class="chart-box">
+              <canvas
+                id="loss-chart"
+                role="img"
+                aria-label="Courbe de la perte sur les points d'entraînement et de test, au fil des itérations. Valeurs actuelles dans le tableau « État du modèle »."
+              ></canvas>
+              <div id="chart-tip" class="chart-tip" hidden></div>
+            </div>
+          </figure>
+        </div>
 
         <figure class="network">
           <canvas id="network" width="420" height="480"></canvas>
@@ -52,10 +77,23 @@
               <button id="demo" type="button">Démo</button>
               <button id="reset" type="button">Reset</button>
             </div>
+            <label class="slider">
+              Part de points de test
+              <input id="test-ratio" type="range" min="0" max="50" step="5" value="20" />
+              <span id="test-ratio-val">20 %</span>
+            </label>
           </section>
 
           <section>
             <h2>Réseau</h2>
+            <fieldset class="features">
+              <legend>Entrées</legend>
+              <label class="check"><input type="checkbox" data-feature="x" /> x</label>
+              <label class="check"><input type="checkbox" data-feature="y" /> y</label>
+              <label class="check"><input type="checkbox" data-feature="x2" /> x²</label>
+              <label class="check"><input type="checkbox" data-feature="y2" /> y²</label>
+              <label class="check"><input type="checkbox" data-feature="xy" /> x·y</label>
+            </fieldset>
             <label class="slider">
               Couches cachées
               <input id="layers" type="range" min="1" max="4" step="1" value="2" />
@@ -66,9 +104,17 @@
               <input id="hidden" type="range" min="1" max="32" step="1" value="8" />
               <span id="hidden-val">8</span>
             </label>
+            <label class="slider">
+              Activation des neurones cachés
+              <select id="activation">
+                <option value="tanh">tanh</option>
+                <option value="relu">ReLU</option>
+                <option value="sigmoid">sigmoïde</option>
+              </select>
+            </label>
             <label class="check">
               <input id="show-lines" type="checkbox" />
-              Afficher la droite de chaque neurone de la 1re couche
+              Afficher la frontière de chaque neurone de la 1re couche
             </label>
             <div class="row">
               <button id="new-weights" type="button">Nouveaux poids aléatoires</button>
@@ -101,9 +147,16 @@
               <tbody>
                 <tr><td>Architecture</td><td id="arch">2 → 8 → 8 → 1</td></tr>
                 <tr><td>Paramètres</td><td id="params">105</td></tr>
-                <tr><td>Perte</td><td id="loss">—</td></tr>
                 <tr><td>Itérations</td><td id="iter">0</td></tr>
-                <tr><td>Erreurs</td><td id="err">0</td></tr>
+              </tbody>
+            </table>
+            <table class="readouts">
+              <thead>
+                <tr><th></th><th>Entraînement</th><th>Test</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>Perte</td><td id="loss-train">—</td><td id="loss-test">—</td></tr>
+                <tr><td>Erreurs</td><td id="err-train">0</td><td id="err-test">0</td></tr>
               </tbody>
             </table>
           </section>

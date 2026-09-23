@@ -3,9 +3,10 @@
 // ---------------------------------------------------------------------------
 
 import type { NodeRef } from "./diagram";
+import { isLinear } from "./features";
 import { contourSegments, decisionLineEndpoints, sampleField, type ScalarField } from "./geometry";
 import type { MLP } from "./mlp";
-import type { Point } from "./state";
+import { isTestPoint, type Point } from "./state";
 
 /** Rayon des points tels qu'on les voit à l'écran, en pixels CSS. */
 const POINT_RADIUS = 7;
@@ -50,7 +51,8 @@ let regionCanvas: HTMLCanvasElement | null = null;
 /**
  * Redessine entièrement la scène.
  *
- * @param scale pixels du canvas par pixel affiché (voir `pointRadius`)
+ * @param scale     pixels du canvas par pixel affiché (voir `pointRadius`)
+ * @param testRatio part des points mis de côté pour le test (voir state.ts)
  */
 export function draw(
   ctx: CanvasRenderingContext2D,
@@ -61,6 +63,7 @@ export function draw(
   showHiddenLines: boolean,
   highlighted: NodeRef | null,
   scale: number,
+  testRatio: number,
 ): void {
   ctx.clearRect(0, 0, width, height);
 
@@ -70,10 +73,10 @@ export function draw(
   const field = sampleField((x, y) => net.forward(x, y), width, height, step);
 
   drawRegions(ctx, field);
-  if (showHiddenLines) drawHiddenLines(ctx, width, height, net);
+  if (showHiddenLines) drawHiddenLines(ctx, width, height, net, step);
   if (highlighted !== null) drawHighlightedNeuron(ctx, width, height, net, highlighted, step);
   drawDecisionCurve(ctx, field);
-  drawPoints(ctx, points, scale);
+  drawPoints(ctx, points, scale, testRatio);
 }
 
 /**
@@ -111,23 +114,29 @@ function drawRegions(ctx: CanvasRenderingContext2D, field: ScalarField): void {
 }
 
 /**
- * Trace en pointillés la droite de chaque neurone de la 1re couche cachée.
- * Toute la suite du réseau est construite en combinant ces droites
- * « adoucies ».
+ * Trace la frontière de chaque neurone de la 1re couche cachée. Toute la
+ * suite du réseau est construite en combinant ces frontières « adoucies ».
  */
-function drawHiddenLines(ctx: CanvasRenderingContext2D, width: number, height: number, net: MLP): void {
+function drawHiddenLines(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  net: MLP,
+  step: number,
+): void {
   ctx.save();
   ctx.strokeStyle = "rgba(60, 60, 90, 0.45)";
   ctx.lineWidth = 1.5;
-  ctx.setLineDash([6, 5]);
-  for (let j = 0; j < net.sizes[1]; j++) strokeHiddenLine(ctx, width, height, net, j);
+  for (let j = 0; j < net.sizes[1]; j++) strokeFirstLayerBoundary(ctx, width, height, net, j, step, [6, 5]);
   ctx.restore();
 }
 
 /**
  * Met en évidence la frontière du neurone caché survolé dans le schéma : là
- * où sa réponse change de signe (h = 0).
- * - 1re couche cachée : c'est une droite, tracée en pointillés.
+ * où sa somme pondérée s'annule (quelle que soit l'activation, c'est là que
+ * le neurone bascule d'un côté à l'autre).
+ * - 1re couche cachée : une droite (en pointillés), ou une courbe si le
+ *   réseau reçoit x², y² ou x·y.
  * - couches suivantes : c'est déjà une courbe, qu'on trace comme la frontière
  *   de décision (mesure sur la grille puis marching squares).
  */
@@ -147,24 +156,48 @@ function drawHighlightedNeuron(
   ctx.strokeStyle = "rgba(30, 30, 50, 0.9)";
   ctx.lineWidth = 3;
   if (layer === 1) {
-    ctx.setLineDash([10, 6]);
-    strokeHiddenLine(ctx, width, height, net, index);
+    strokeFirstLayerBoundary(ctx, width, height, net, index, step, [10, 6]);
   } else {
-    const response = (x: number, y: number) => {
+    const sum = (x: number, y: number) => {
       net.forward(x, y);
-      return net.activations[layer][index];
+      return net.sums[layer][index];
     };
-    strokeContour(ctx, sampleField(response, width, height, step), 0);
+    strokeContour(ctx, sampleField(sum, width, height, step), 0);
   }
   ctx.restore();
 }
 
-/** Trace la droite du neurone j de la 1re couche cachée (le style est choisi par l'appelant). */
-function strokeHiddenLine(ctx: CanvasRenderingContext2D, width: number, height: number, net: MLP, j: number): void {
-  const [wx, wy] = net.layers[0].w[j];
-  const line = decisionLineEndpoints(wx, wy, net.layers[0].b[j], width, height);
+/**
+ * Trace la frontière du neurone j de la 1re couche cachée (la couleur et
+ * l'épaisseur sont choisies par l'appelant).
+ * - Entrées x et y seulement : w_x·x + w_y·y + b = 0 est une droite, tracée
+ *   d'un bord à l'autre, en pointillés (`dash`).
+ * - Avec x², y² ou x·y : c'est une courbe (ellipse, hyperbole...), tracée
+ *   comme la frontière de décision.
+ */
+function strokeFirstLayerBoundary(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  net: MLP,
+  j: number,
+  step: number,
+  dash: number[],
+): void {
+  const { w, b } = net.layers[0];
+  if (!isLinear(net.features)) {
+    ctx.setLineDash([]);
+    strokeContour(ctx, sampleField((x, y) => net.firstLayerSum(j, x, y), width, height, step), 0);
+    return;
+  }
+
+  // Poids de x et de y (0 si l'entrée n'est pas donnée au réseau).
+  const ix = net.features.indexOf("x");
+  const iy = net.features.indexOf("y");
+  const line = decisionLineEndpoints(ix >= 0 ? w[j][ix] : 0, iy >= 0 ? w[j][iy] : 0, b[j], width, height);
   if (!line) return;
   const [a, c] = line;
+  ctx.setLineDash(dash);
   ctx.beginPath();
   ctx.moveTo(a.x, a.y);
   ctx.lineTo(c.x, c.y);
@@ -189,11 +222,20 @@ function strokeContour(ctx: CanvasRenderingContext2D, field: ScalarField, level:
   ctx.stroke();
 }
 
-function drawPoints(ctx: CanvasRenderingContext2D, points: Point[], scale: number): void {
+/**
+ * Les points : ronds pour l'entraînement, carrés pour le test (le réseau ne
+ * les voit jamais pendant l'apprentissage).
+ */
+function drawPoints(ctx: CanvasRenderingContext2D, points: Point[], scale: number, testRatio: number): void {
   const r = pointRadius(scale);
   for (const p of points) {
     ctx.beginPath();
-    ctx.arc(p.px, p.py, r, 0, Math.PI * 2);
+    if (isTestPoint(p, testRatio)) {
+      const half = r * 0.9; // à rayon égal, un carré paraît plus gros qu'un rond
+      ctx.rect(p.px - half, p.py - half, half * 2, half * 2);
+    } else {
+      ctx.arc(p.px, p.py, r, 0, Math.PI * 2);
+    }
     ctx.fillStyle = p.label === 1 ? "#101018" : "#ffffff";
     ctx.fill();
     ctx.lineWidth = 2 * Math.max(1, scale);
