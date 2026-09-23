@@ -7,6 +7,7 @@ import { contourSegments, decisionLineEndpoints, sampleField, type ScalarField }
 import type { MLP } from "./mlp";
 import type { Point } from "./state";
 
+/** Rayon des points tels qu'on les voit à l'écran, en pixels CSS. */
 const POINT_RADIUS = 7;
 
 /**
@@ -31,14 +32,26 @@ function gridStep(net: MLP, width: number, height: number): number {
   return Math.min(MAX_GRID_STEP, Math.max(MIN_GRID_STEP, step));
 }
 
-export function pointRadius(): number {
-  return POINT_RADIUS;
+/**
+ * Rayon d'un point, en pixels du canvas.
+ *
+ * @param scale pixels du canvas par pixel affiché : 1 quand le canvas est
+ *              affiché à sa taille réelle, plus quand il est rétréci (sur un
+ *              téléphone par exemple). Les points gardent ainsi la même
+ *              taille à l'écran.
+ */
+export function pointRadius(scale: number): number {
+  return POINT_RADIUS * Math.max(1, scale);
 }
 
 /** Petit canvas hors écran : une case de la grille = un pixel. */
 let regionCanvas: HTMLCanvasElement | null = null;
 
-/** Redessine entièrement la scène. */
+/**
+ * Redessine entièrement la scène.
+ *
+ * @param scale pixels du canvas par pixel affiché (voir `pointRadius`)
+ */
 export function draw(
   ctx: CanvasRenderingContext2D,
   width: number,
@@ -47,6 +60,7 @@ export function draw(
   net: MLP,
   showHiddenLines: boolean,
   highlighted: NodeRef | null,
+  scale: number,
 ): void {
   ctx.clearRect(0, 0, width, height);
 
@@ -59,7 +73,7 @@ export function draw(
   if (showHiddenLines) drawHiddenLines(ctx, width, height, net);
   if (highlighted !== null) drawHighlightedNeuron(ctx, width, height, net, highlighted, step);
   drawDecisionCurve(ctx, field);
-  drawPoints(ctx, points);
+  drawPoints(ctx, points, scale);
 }
 
 /**
@@ -175,13 +189,14 @@ function strokeContour(ctx: CanvasRenderingContext2D, field: ScalarField, level:
   ctx.stroke();
 }
 
-function drawPoints(ctx: CanvasRenderingContext2D, points: Point[]): void {
+function drawPoints(ctx: CanvasRenderingContext2D, points: Point[], scale: number): void {
+  const r = pointRadius(scale);
   for (const p of points) {
     ctx.beginPath();
-    ctx.arc(p.px, p.py, POINT_RADIUS, 0, Math.PI * 2);
+    ctx.arc(p.px, p.py, r, 0, Math.PI * 2);
     ctx.fillStyle = p.label === 1 ? "#101018" : "#ffffff";
     ctx.fill();
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2 * Math.max(1, scale);
     ctx.strokeStyle = "#101018";
     ctx.stroke();
   }

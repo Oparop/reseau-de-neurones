@@ -52,23 +52,30 @@ h2 {
 }
 
 canvas {
+  display: block;
+  /* Sur petit écran, le canvas rétrécit en gardant ses proportions. */
+  max-width: 100%;
+  height: auto;
   background: #f5f5fa;
   border: 1px solid var(--border);
   border-radius: 8px;
   cursor: crosshair;
-  touch-action: none;
+  /* Au doigt : la page défile toujours, mais sans zoom au double-tap. */
+  touch-action: manipulation;
 }
 
 /* Schéma du réseau */
 .network {
   margin: 0;
-  width: 420px;
+  width: 100%;
+  max-width: 420px;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
 #network {
+  width: 100%;
   background: var(--panel);
   cursor: default;
 }
@@ -200,4 +207,32 @@ select {
 .readouts td:last-child {
   text-align: right;
   font-weight: 600;
+}
+
+/* Téléphone : tout sur une colonne, les réglages juste sous le plan (on voit
+   la courbe en appuyant sur « Entraîner »), le schéma du réseau à la fin. */
+@media (max-width: 700px) {
+  #app {
+    padding: 12px;
+  }
+
+  h1 {
+    font-size: 1.25rem;
+  }
+
+  .layout {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .panel {
+    order: 1;
+    min-width: 0;
+  }
+
+  .network {
+    order: 2;
+    max-width: none;
+  }
 }

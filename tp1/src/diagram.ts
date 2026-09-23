@@ -220,7 +220,10 @@ export function describeNode(net: MLP, node: NodeRef | null): string {
   const sizes = net.sizes;
   const last = sizes.length - 1;
   if (node === null || node.layer > last || node.index >= sizes[node.layer]) {
-    return "Survole un neurone pour lire ses poids. Survole le plan pour suivre un point à travers le réseau.";
+    return (
+      "Survole (ou touche) un neurone pour lire ses poids. " +
+      "Survole (ou touche) le plan pour suivre un point à travers le réseau."
+    );
   }
 
   const { layer, index: j } = node;

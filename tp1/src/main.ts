@@ -22,12 +22,11 @@ const dctx = diagram.getContext("2d");
 if (!dctx) throw new Error("Contexte 2D indisponible");
 
 // Taille logique en pixels CSS. La résolution réelle est multipliée par la
-// densité de l'écran pour que les textes du schéma restent nets.
+// densité de l'écran pour que les textes du schéma restent nets. La taille
+// affichée, elle, est laissée au CSS : le schéma rétrécit sur petit écran.
 const DW = diagram.width;
 const DH = diagram.height;
 const dpr = window.devicePixelRatio || 1;
-diagram.style.width = `${DW}px`;
-diagram.style.height = `${DH}px`;
 diagram.width = Math.round(DW * dpr);
 diagram.height = Math.round(DH * dpr);
 dctx.scale(dpr, dpr);
@@ -78,9 +77,20 @@ const ui = setupUi({
   },
 });
 
-// --- Interaction souris : ajouter ou supprimer un point ---------------------
+// --- Interaction : ajouter ou supprimer un point -----------------------------
+// Les « pointer events » couvrent à la fois la souris et le doigt (écran
+// tactile).
 
-/** Position de la souris en pixels du canvas. */
+/**
+ * Au doigt, on vise moins précisément qu'à la souris : on élargit de ce
+ * nombre de pixels (à l'écran) la zone où toucher un point le supprime.
+ */
+const TOUCH_SLOP = 8;
+
+/** Type du dernier pointeur posé sur le plan : "mouse", "touch" ou "pen". */
+let lastPointerType = "mouse";
+
+/** Position du pointeur (souris ou doigt) en pixels du canvas. */
 function canvasPixel(target: HTMLCanvasElement, event: MouseEvent, width: number, height: number) {
   const rect = target.getBoundingClientRect();
   // Le canvas peut être affiché à une taille différente de sa résolution.
@@ -90,6 +100,16 @@ function canvasPixel(target: HTMLCanvasElement, event: MouseEvent, width: number
   };
 }
 
+/**
+ * Pixels du canvas par pixel affiché : 1 quand le plan est affiché à sa
+ * taille réelle, plus quand il est rétréci (sur un téléphone par exemple).
+ */
+function displayScale(): number {
+  return W / canvas.getBoundingClientRect().width;
+}
+
+// On ajoute ou supprime au « click » plutôt qu'au contact : au doigt, un
+// glissement fait défiler la page sans poser de point.
 canvas.addEventListener("click", (event) => {
   const { px, py } = canvasPixel(canvas, event, W, H);
 
@@ -101,27 +121,38 @@ canvas.addEventListener("click", (event) => {
   }
 });
 
-// Survol du plan : on suit le point sous la souris à travers le réseau.
-canvas.addEventListener("mousemove", (event) => {
+// Survol du plan (ou toucher au doigt) : on suit ce point à travers le réseau.
+function trackProbe(event: PointerEvent): void {
   const { px, py } = canvasPixel(canvas, event, W, H);
   state.probe = toNormalized(px, py, W, H);
+}
+canvas.addEventListener("pointermove", trackProbe);
+canvas.addEventListener("pointerdown", (event) => {
+  lastPointerType = event.pointerType;
+  trackProbe(event);
 });
-canvas.addEventListener("mouseleave", () => {
-  state.probe = null;
+canvas.addEventListener("pointerleave", (event) => {
+  // Au doigt, le pointeur « quitte » le canvas dès qu'on lève le doigt : on
+  // garde alors le dernier point touché.
+  if (event.pointerType === "mouse") state.probe = null;
 });
 
-// Survol du schéma : on repère le neurone sous la souris.
-diagram.addEventListener("mousemove", (event) => {
+// Survol du schéma (ou toucher au doigt) : on repère le neurone visé.
+function trackNode(event: PointerEvent): void {
   const { px, py } = canvasPixel(diagram, event, DW, DH);
   state.hoveredNode = hitTestDiagram(DW, DH, net.sizes, px, py);
-});
-diagram.addEventListener("mouseleave", () => {
-  state.hoveredNode = null;
+}
+diagram.addEventListener("pointermove", trackNode);
+diagram.addEventListener("pointerdown", trackNode);
+diagram.addEventListener("pointerleave", (event) => {
+  if (event.pointerType === "mouse") state.hoveredNode = null;
 });
 
-/** Renvoie l'index d'un point sous le curseur, ou -1. */
+/** Renvoie l'index d'un point sous le pointeur, ou -1. */
 function findPointAt(px: number, py: number): number {
-  const r = pointRadius();
+  const scale = displayScale();
+  const slop = lastPointerType === "touch" ? TOUCH_SLOP * scale : 0;
+  const r = pointRadius(scale) + slop;
   for (let i = state.points.length - 1; i >= 0; i--) {
     const p = state.points[i]!;
     if (Math.hypot(p.px - px, p.py - py) <= r) return i;
@@ -147,7 +178,7 @@ function step(): void {
 
   // Un neurone caché survolé dans le schéma : on surligne sa frontière sur le plan.
   const hovered = state.hoveredNode;
-  draw(ctx!, W, H, state.points, net, state.showHiddenLines, hovered);
+  draw(ctx!, W, H, state.points, net, state.showHiddenLines, hovered, displayScale());
 
   drawDiagram(dctx!, DW, DH, net, state.probe, hovered);
   ui.updateNeuronInfo(describeNode(net, hovered));
